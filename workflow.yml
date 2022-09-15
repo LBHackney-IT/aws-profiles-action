@@ -1,0 +1,37 @@
+name: Configure AWS Profile
+
+inputs:
+  aws_region: 
+    description: Region to assume role with
+    required: true
+    default: eu-west-2
+  aws_access_key: 
+    description: AWS access key
+    required: true
+  aws_secret_key:
+    description: AWS secret key
+    required: true
+  profile_config:
+    description: "Profile and role in the format of [{role: role, profile: profile, duration: duration}]"
+    default: "[]"
+
+jobs:
+  create_profile:
+    strategy:
+      matrix:
+        profile_config: toJSON(${{ inputs.profile_config }})
+    steps:
+      - name: Setup AWS Profile 
+        id: setup
+        run: |
+          aws configure set default.region ${{ inputs.aws_region }} > /dev/null 2>&1
+          aws configure set aws_access_key_id ${{ inputs.aws_access_key}}
+          aws configure set aws_secret_access_key ${{ inputs.aws_secret_key }}
+          role=$(aws sts assume-role --role-arn ${{ context.profile_config.role }} --role-session-name ${{context.profile_config.role }} --duration-seconds ${{ context.profile_config.duration }}) 
+          export AWS_ACCESS_KEY_ID=$(echo $role | jq -r .Credentials.AccessKeyId) &>/dev/null
+          export AWS_SECRET_ACCESS_KEY=$(echo $role | jq -r .Credentials.SecretAccessKey) &>/dev/null
+          export AWS_SESSION_TOKEN=$(echo $role | jq -r .Credentials.SessionToken) &>/dev/null
+          aws configure set aws_access_key_id $AWS_ACCESS_KEY_ID --profile ${{ context.profile_config.role }} &>/dev/null
+          aws configure set aws_secret_access_key $AWS_SECRET_ACCESS_KEY --profile ${{ context.profile_config.role }} &>/dev/null
+          aws configure set aws_session_token $AWS_SESSION_TOKEN --profile ${{ context.profile_config.role }} &>/dev/null
+        shell: bash
